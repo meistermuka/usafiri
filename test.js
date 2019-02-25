@@ -3,63 +3,52 @@ const fs = require("fs");
 const path = require("path");
 const unzip = require("unzip");
 const parse = require("csv-parse");
-const Papa = require("papaparse");
-const csvparser = require("csv-parser");
-
-const parser = parse({
-    delimiter: ',',
-    columns: true
-});
-
-
-
-const validStopTimes = [];
 
 const zippedFile = path.join(__dirname, "GTFS.zip");
 
-/* function getValidStopTimes(zipFile, validStopIds) {
-
-    fs.createReadStream(zipFile)
-      .on(unzip.Parse())
-      .on("entry", function(entry) {
-        if(entry.path === "stop_times.txt") {
-            entry.pipe(parser).on("readable", function() {
-
-            })
-        }
-      })
-
-} */
-const getStopIds = function(zipFile) {
+const getStopIds = function(zipfile) {
     const validStopIds = [];
     return new Promise((resolve, reject) => {
-        fs.createReadStream(zipFile)
+        let zfs = fs.createReadStream(zipfile);
+        let parser = parse({
+            delimiter: ',',
+            columns: true
+        });
+        zfs
           .pipe(unzip.Parse())
           .on("entry", function(entry) {
             if(entry.path === "stops.txt") {
-                entry.pipe(parser).on("readable", function() {
-                    let stop;
-                    while (stop = this.read()) {
-                        if (stop['stop_name'] !== undefined && stop['stop_name'].includes("Grand Central")) {
-                          validStopIds.push(stop['stop_id']);
+                entry.pipe(parser)
+                     .on("readable", function() {
+                        let stop;
+                        while (stop = this.read()) {
+                            if (stop['stop_name'] !== undefined && stop['stop_name'].includes("Grand Central")) {
+                                validStopIds.push(stop['stop_id']);
+                            }
                         }
-                    }
-                }).on("end", function() {
-                  resolve(validStopIds);
-                }).on("error", function(e) {
-                    reject(e);
-                });  
+                    }).on("end", function() {
+                        resolve(validStopIds);
+                    }).on("error", function(e) {
+                        reject(e);
+                    });  
             } else {
               entry.autodrain();
             }
-          })
+          }).on("end", () => {
+              zfs.close();
+          });
     });
 }
 
-const getTripIds = function(stopTimes, zipFile) {
-    const validTripIds = [];
+const getTripIds = function(stopTimes, zipfile) {
+    let validTripIds = [];
     return new Promise((resolve, reject) => {
-        fs.createReadStream(zipFile)
+        let zfs = fs.createReadStream(zipfile);
+        const parser = parse({
+            delimiter: ',',
+            columns: true
+        });
+        zfs
           .pipe(unzip.Parse())
           .on("entry", function(entry) {
               if(entry.path === "stop_times.txt") {
@@ -78,61 +67,57 @@ const getTripIds = function(stopTimes, zipFile) {
               } else {
                   entry.autodrain();
               }
-          });
+          }).on("error", (e) => {
+              console.log(e)
+          }).on("end", () => {
+              zfs.close();
+          })
+    });
+}
+
+const getRouteIds = function(tripIds, zipfile) {
+
+    return new Promise((resolve, reject) => {
+        let validRouteIds = new Set();
+        let zfs = fs.createReadStream(zipfile);
+        let parser = parse({ delimiter: ',', columns: true });
+        zfs.pipe(unzip.Parse())
+           .on("entry", (entry) => {
+               if(entry.path === "trips.txt") {
+                   entry.pipe(parser).on("readable", function() {
+                       let trip;
+                       while(trip = this.read()) {
+                           if (tripIds.includes(trip['trip_id'])) {
+                               validRouteIds.add(trip['route_id']);
+                           }
+                       }
+                   }).on("end", () => {
+                       resolve(validRouteIds);
+                   }).on("error", (e) => {
+                       reject(e);
+                   });
+               } else {
+                   entry.autodrain();
+               }
+           }).on("error", (e) => {
+               console.log(e);
+           }).on("end", () => {
+               zfs.close();
+           })
     });
 }
 try {
-
     getStopIds(zippedFile)
     .then(stops => {
-        console.log(getTripIds(stops, zippedFile));
-    }).catch(console.error);
-
-    /* fs.createReadStream(zippedFile)
-      .pipe(unzip.Parse())
-      .on("entry", function(entry) {
-          if(entry.path === "stops.txt") {
-              entry.pipe(parser).on("readable", function() {
-                  let stop;
-                  while (stop = this.read()) {
-                      if (stop['stop_name'] !== undefined && stop['stop_name'].includes("Grand Central")) {
-                        validStopIds.push(stop['stop_id']);
-                      }
-                  }
-              }).on("end", function() {
-                return validStopIds;
-              });
-
-          } else {
-            entry.autodrain();
-          }
-        }).resume()
-          .pipe(unzip.Parse())
-          .on("entry", function(entry) {
-              if(entry.path === "stop_times.txt") {
-                  console.log("FOUND STOP TIMES!");
-              } else {
-                  entry.autodrain();
-              }
-          });
-
-
-          /* } else if(filename === "stop_times.txt") {
-              entry.pipe(parser).on("readable", function() {
-                  let time_rec;
-                  while (time_rec = this.read()) {
-                    if (validStopIds.includes(time_rec['stop_id'])) {
-                        validStopTimes.push(time_rec['trip_id']);
-                    }
-                  }
-              }).on("end", function() {
-                  console.log(validStopTimes);
-              }) */
+        return getTripIds(stops, zippedFile);
+    }).then(trips => {
+        return getRouteIds(trips, zippedFile);
+    }).then(routeids => {
+        console.log(routeids);
+    }).catch((err) => {
+        console.log(err);
+    });
 
 } catch(e) {
     console.log(e);
 }
-
-//const w = fs.createWriteStream("./demofile.txt.gz");
-
-//r.pipe(gzip).pipe(w);
