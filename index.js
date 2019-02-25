@@ -1,11 +1,12 @@
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
 const Papa = require("papaparse");
 
-const stopsFile = __dirname + "/stops.txt";
-const tripsFile = __dirname + "/trips.txt";
-const stopsTimesFile = __dirname + "/stop_times.txt";
+const stopsFile = path.join(__dirname, "stops.txt");
+const tripsFile = path.join(__dirname, "trips.txt");
+const stopsTimesFile = path.join(__dirname, "stop_times.txt");
 
 const stopsContent = fs.readFileSync(stopsFile, "utf8");
 const tripsContent = fs.readFileSync(tripsFile, "utf8");
