@@ -1,68 +1,119 @@
 "use strict";
-
 const fs = require("fs");
 const path = require("path");
-const Papa = require("papaparse");
+const unzip = require("unzip");
+const parse = require("csv-parse");
 
-const stopsFile = path.join(__dirname, "stops.txt");
-const tripsFile = path.join(__dirname, "trips.txt");
-const stopsTimesFile = path.join(__dirname, "stop_times.txt");
+const zippedFile = path.join(__dirname, "GTFS.zip");
 
-const stopsContent = fs.readFileSync(stopsFile, "utf8");
-const tripsContent = fs.readFileSync(tripsFile, "utf8");
-const stopsTimesContent = fs.readFileSync(stopsTimesFile, "utf8");
+const getStopIds = function(zipfile) {
+    const validStopIds = [];
+    return new Promise((resolve, reject) => {
+        let zfs = fs.createReadStream(zipfile);
+        let parser = parse({ delimiter: ',', columns: true });
+        
+        zfs
+          .pipe(unzip.Parse())
+          .on("entry", function(entry) {
+            if(entry.path === "stops.txt") {
+                entry.pipe(parser)
+                     .on("readable", function() {
+                        let stop;
+                        while (stop = this.read()) {
+                            if (stop['stop_name'] !== undefined && stop['stop_name'].includes("Grand Central")) {
+                                validStopIds.push(stop['stop_id']);
+                            }
+                        }
+                    }).on("end", function() {
+                        resolve(validStopIds);
+                    }).on("error", function(e) {
+                        reject(e);
+                    });  
+            } else {
+              entry.autodrain();
+            }
+          }).on("end", () => {
+              zfs.close();
+          });
+    });
+};
 
-// Getting the stops matching "Grand Central"
-let stopsStruct;
-Papa.parse(stopsContent, {
-    header: true,
-    delimiter: ",",
-    complete: function(results) {
-        stopsStruct = results.data.filter(function(stop) {
-            return stop['stop_name'] !== undefined && stop['stop_name'].includes("Grand Central");            
+const getTripIds = function(stopTimes, zipfile) {
+    let validTripIds = [];
+    return new Promise((resolve, reject) => {
+        let zfs = fs.createReadStream(zipfile);
+        let parser = parse({ delimiter: ',', columns: true });
+
+        zfs
+          .pipe(unzip.Parse())
+          .on("entry", function(entry) {
+              if(entry.path === "stop_times.txt") {
+                  entry.pipe(parser).on("readable", function() {
+                      let stop_time;
+                      while (stop_time = this.read()) {
+                          if (stopTimes.includes(stop_time['stop_id'])) {
+                            validTripIds.push(stop_time['trip_id']);
+                          }
+                      }
+                  }).on("end", function() {
+                      resolve(validTripIds);
+                  }).on("error", function(e) {
+                      reject(e);
+                  });
+              } else {
+                  entry.autodrain();
+              }
+          }).on("error", (e) => {
+              console.log(e)
+          }).on("end", () => {
+              zfs.close();
+          })
+    });
+}
+
+const getRouteIds = function(tripIds, zipfile) {
+    return new Promise((resolve, reject) => {
+        let validRouteIds = new Set();
+        let zfs = fs.createReadStream(zipfile);
+        let parser = parse({ delimiter: ',', columns: true });
+        zfs.pipe(unzip.Parse())
+           .on("entry", (entry) => {
+               if(entry.path === "trips.txt") {
+                   entry.pipe(parser).on("readable", function() {
+                       let trip;
+                       while(trip = this.read()) {
+                           if (tripIds.includes(trip['trip_id'])) {
+                               validRouteIds.add(trip['route_id']);
+                           }
+                       }
+                   }).on("end", () => {
+                       resolve(validRouteIds);
+                   }).on("error", (e) => {
+                       reject(e);
+                   });
+               } else {
+                   entry.autodrain();
+               }
+           }).on("error", (e) => {
+               console.log(e);
+           }).on("end", () => {
+               zfs.close();
+           })
+    });
+};
+
+try {
+    getStopIds(zippedFile)
+        .then(stops => {
+            return getTripIds(stops, zippedFile);
+        }).then(trips => {
+            return getRouteIds(trips, zippedFile);
+        }).then(routeids => {
+            console.log(routeids);
+        }).catch((err) => {
+            console.log(err);
         });
-    }
-});
 
-let stops = []
-stopsStruct.forEach(element => {
-    stops.push(element['stop_id']);
-});
-
-// Getting the stop times for all stop_ids matching "Grand Central"
-let stopsTimesStruct;
-Papa.parse(stopsTimesContent, {
-    header: true,
-    delimiter: ",",
-    complete: function(results) {
-        stopsTimesStruct = results.data.filter(function(stopsTime) {
-            return stops.includes(stopsTime['stop_id']);
-        })
-    }
-});
-
-let trip_ids = [];
-stopsTimesStruct.forEach(element => {
-    trip_ids.push(element['trip_id']);
-})
-
-let tripsStruct;
-Papa.parse(tripsContent, {
-    header: true,
-    delimiter: ",",
-    complete: function(results) {
-        tripsStruct = results.data.filter(function(trip) {
-            return trip_ids.includes(trip['trip_id']);
-        })
-    }
-})
-
-const route_ids = new Set();
-tripsStruct.forEach(element => {
-    route_ids.add(element['route_id'])
-})
-
-console.log("ROUTE IDs");
-console.log(route_ids);
-
-
+} catch(e) {
+    console.log(e);
+}
