@@ -8,8 +8,8 @@ const getStopIds = function(zipfile) {
     const validStopIds = [];
     return new Promise((resolve, reject) => {
 
-        let zfs = fs.createReadStream(zipfile);
-        let parser = parse({ delimiter: ',', columns: true });
+        const zfs = fs.createReadStream(zipfile);
+        const parser = parse({ delimiter: ',', columns: true });
 
         zfs
           .pipe(unzip.Parse())
@@ -40,11 +40,11 @@ const getStopIds = function(zipfile) {
 };
 
 const getTripIds = function(stopTimes, zipfile) {
-    let validTripIds = [];
+    const validTripIds = [];
     return new Promise((resolve, reject) => {
 
-        let zfs = fs.createReadStream(zipfile);
-        let parser = parse({ delimiter: ',', columns: true });
+        const zfs = fs.createReadStream(zipfile);
+        const parser = parse({ delimiter: ',', columns: true });
 
         zfs
           .pipe(unzip.Parse())
@@ -74,11 +74,11 @@ const getTripIds = function(stopTimes, zipfile) {
 }
 
 const getRouteIds = function(tripIds, zipfile) {
+    const validRouteIds = new Set();
     return new Promise((resolve, reject) => {
 
-        let validRouteIds = new Set();
-        let zfs = fs.createReadStream(zipfile);
-        let parser = parse({ delimiter: ',', columns: true });
+        const zfs = fs.createReadStream(zipfile);
+        const parser = parse({ delimiter: ',', columns: true });
 
         zfs
            .pipe(unzip.Parse())
