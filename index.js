@@ -4,14 +4,13 @@ const path = require("path");
 const unzip = require("unzip");
 const parse = require("csv-parse");
 
-const zippedFile = path.join(__dirname, "GTFS.zip");
-
 const getStopIds = function(zipfile) {
     const validStopIds = [];
     return new Promise((resolve, reject) => {
+
         let zfs = fs.createReadStream(zipfile);
         let parser = parse({ delimiter: ',', columns: true });
-        
+
         zfs
           .pipe(unzip.Parse())
           .on("entry", function(entry) {
@@ -32,6 +31,8 @@ const getStopIds = function(zipfile) {
             } else {
               entry.autodrain();
             }
+          }).on("error", (e) => {
+              reject(e);
           }).on("end", () => {
               zfs.close();
           });
@@ -41,6 +42,7 @@ const getStopIds = function(zipfile) {
 const getTripIds = function(stopTimes, zipfile) {
     let validTripIds = [];
     return new Promise((resolve, reject) => {
+
         let zfs = fs.createReadStream(zipfile);
         let parser = parse({ delimiter: ',', columns: true });
 
@@ -64,7 +66,7 @@ const getTripIds = function(stopTimes, zipfile) {
                   entry.autodrain();
               }
           }).on("error", (e) => {
-              console.log(e)
+              reject(e);
           }).on("end", () => {
               zfs.close();
           })
@@ -73,10 +75,13 @@ const getTripIds = function(stopTimes, zipfile) {
 
 const getRouteIds = function(tripIds, zipfile) {
     return new Promise((resolve, reject) => {
+
         let validRouteIds = new Set();
         let zfs = fs.createReadStream(zipfile);
         let parser = parse({ delimiter: ',', columns: true });
-        zfs.pipe(unzip.Parse())
+
+        zfs
+           .pipe(unzip.Parse())
            .on("entry", (entry) => {
                if(entry.path === "trips.txt") {
                    entry.pipe(parser).on("readable", function() {
@@ -95,12 +100,14 @@ const getRouteIds = function(tripIds, zipfile) {
                    entry.autodrain();
                }
            }).on("error", (e) => {
-               console.log(e);
+               reject(e);               
            }).on("end", () => {
                zfs.close();
            })
     });
 };
+
+const zippedFile = path.join(__dirname, "GTFS.zip");
 
 try {
     getStopIds(zippedFile)
